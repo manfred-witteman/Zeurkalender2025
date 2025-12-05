@@ -106,6 +106,12 @@ final class CalendarImageCache {
         cleanupCache(today: today)
     }
 
+    /// Geeft direct een gecachte afbeelding terug, of nil als niet aanwezig (géén disk/netwerk fetch)
+    func cachedImage(for date: Date) -> UIImage? {
+        let filename = filenameFor(date: date)
+        return memoryCache.object(forKey: filename as NSString)
+    }
+
     // MARK: - Private Helpers
 
     /// Convert Date to filename (yyMMdd.png)

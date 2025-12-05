@@ -3,7 +3,6 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var viewModel: AppViewModel
     @State private var currentPage = 0
-    @State private var images: [UIImage] = []
     @State private var dates: [Date] = []
     @State private var isSharePresented = false
 
@@ -12,15 +11,18 @@ struct ContentView: View {
             Color.red
                 .ignoresSafeArea()
 
-            if images.isEmpty {
+            if dates.isEmpty {
                 ProgressView("Cartoon van vandaag laden...")
             } else {
                 ZStack {
-                    PageCurlView(images: images, currentPage: $currentPage)
-                        .aspectRatio(1290/2288, contentMode: .fit)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    PageCurlView(
+                        dates: dates,
+                        currentPage: $currentPage,
+                        viewModel: viewModel
+                    )
+                    .aspectRatio(1290/2288, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                    // BOTTOM BUTTON overlay
                     VStack {
                         Spacer()
                         Button(
@@ -42,15 +44,16 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $isSharePresented) {
-            if !images.isEmpty && currentPage < images.count {
+            if !dates.isEmpty && currentPage < dates.count, 
+               let img = viewModel.imageCache.cachedImage(for: dates[currentPage]) {
                 ShareSheet(items: [
-                    images[currentPage],
+                    img,
                     MailShareItem(settings: viewModel.settings!)
                 ])
             }
         }
         .task {
-            await loadTodayAndPrefetch()
+            await loadDays()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             scrollToToday()
@@ -58,49 +61,22 @@ struct ContentView: View {
     }
 
     // MARK: - Helper functions
-    private func loadTodayAndPrefetch() async {
+    private func loadDays() async {
         await viewModel.loadSettings()
         guard let settings = viewModel.settings else { return }
-
         let calendar = Calendar.current
-        let today = Date()
+        let today = calendar.startOfDay(for: Date())
 
-        // 1. Laad alleen cartoon van vandaag
-        var loadedImages: [UIImage] = []
-        var loadedDates: [Date] = []
-
-        if let todayImage = await viewModel.image(for: today) {
-            loadedImages.append(todayImage)
-            loadedDates.append(today)
-            self.images = loadedImages
-            self.dates = loadedDates
-            self.currentPage = 0 // Vandaag is altijd eerste
+        // Stel archief samen van settings.firstDate t/m vandaag
+        var ds: [Date] = []
+        var date = calendar.startOfDay(for: settings.firstDate)
+        while date <= today {
+            ds.append(date)
+            guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
+            date = next
         }
-
-        // 2. Laad de rest asynchroon (oudere cartoons, gisteren, etc.)
-        Task.detached { [settings] in
-            let calendar = Calendar.current
-            var extraImages: [(img: UIImage, date: Date)] = []
-
-            var date = settings.firstDate
-            while date < calendar.startOfDay(for: today) {
-                if let img = await viewModel.image(for: date) {
-                    extraImages.append((img, date))
-                }
-                guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
-                date = next
-            }
-
-            // Gisteren eerst, dan de rest
-            extraImages.sort { $0.date < $1.date }
-
-            // Voeg de nieuwe cartoons toe vóór vandaag (zodat chronologie klopt)
-            await MainActor.run {
-                self.images = extraImages.map { $0.img } + loadedImages
-                self.dates = extraImages.map { $0.date } + loadedDates
-                scrollToToday()
-            }
-        }
+        self.dates = ds
+        scrollToToday()
     }
 
     private func scrollToToday() {
