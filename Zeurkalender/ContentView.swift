@@ -13,24 +13,12 @@ struct ContentView: View {
                 .ignoresSafeArea()
 
             if images.isEmpty {
-                ProgressView("Cartoons laden...")
+                ProgressView("Cartoon van vandaag laden...")
             } else {
                 ZStack {
                     PageCurlView(images: images, currentPage: $currentPage)
                         .aspectRatio(1290/2288, contentMode: .fit)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-//                    // TOP IMAGE overlay
-//                    VStack {
-//                        Image("randje")
-//                                    .resizable()
-//                                    .scaledToFit()
-//                                    .frame(maxWidth: .infinity)
-//                                    .padding(.top, 0)             // aligns to the very top of safe area
-//                                    .ignoresSafeArea(edges: .top) // optionally move into status bar area
-//                                    .allowsHitTesting(false)
-//                                Spacer()
-//                    }
 
                     // BOTTOM BUTTON overlay
                     VStack {
@@ -62,7 +50,7 @@ struct ContentView: View {
             }
         }
         .task {
-            await loadImages()
+            await loadTodayAndPrefetch()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             scrollToToday()
@@ -70,28 +58,49 @@ struct ContentView: View {
     }
 
     // MARK: - Helper functions
-    private func loadImages() async {
+    private func loadTodayAndPrefetch() async {
         await viewModel.loadSettings()
         guard let settings = viewModel.settings else { return }
 
         let calendar = Calendar.current
+        let today = Date()
+
+        // 1. Laad alleen cartoon van vandaag
         var loadedImages: [UIImage] = []
         var loadedDates: [Date] = []
 
-        var date = settings.firstDate
-        while date <= Date() {
-            if let img = await viewModel.image(for: date) {
-                loadedImages.append(img)
-                loadedDates.append(date)
-            }
-            guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
-            date = next
+        if let todayImage = await viewModel.image(for: today) {
+            loadedImages.append(todayImage)
+            loadedDates.append(today)
+            self.images = loadedImages
+            self.dates = loadedDates
+            self.currentPage = 0 // Vandaag is altijd eerste
         }
 
-        self.images = loadedImages
-        self.dates = loadedDates
+        // 2. Laad de rest asynchroon (oudere cartoons, gisteren, etc.)
+        Task.detached { [settings] in
+            let calendar = Calendar.current
+            var extraImages: [(img: UIImage, date: Date)] = []
 
-        scrollToToday()
+            var date = settings.firstDate
+            while date < calendar.startOfDay(for: today) {
+                if let img = await viewModel.image(for: date) {
+                    extraImages.append((img, date))
+                }
+                guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
+                date = next
+            }
+
+            // Gisteren eerst, dan de rest
+            extraImages.sort { $0.date < $1.date }
+
+            // Voeg de nieuwe cartoons toe vóór vandaag (zodat chronologie klopt)
+            await MainActor.run {
+                self.images = extraImages.map { $0.img } + loadedImages
+                self.dates = extraImages.map { $0.date } + loadedDates
+                scrollToToday()
+            }
+        }
     }
 
     private func scrollToToday() {

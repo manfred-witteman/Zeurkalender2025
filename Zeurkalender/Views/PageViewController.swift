@@ -35,8 +35,27 @@ struct PageCurlView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIPageViewController, context: Context) {
-        let controller = context.coordinator.controllers[currentPage]
-        uiViewController.setViewControllers([controller], direction: .forward, animated: false)
+        // Synchroniseer controllers-lijst met images indien nodig
+        if context.coordinator.controllers.count != images.count {
+            context.coordinator.controllers = images.map { image in
+                let imageView = UIImageView(image: image)
+                imageView.contentMode = .scaleAspectFit
+                return UIViewControllerWrapper(view: imageView)
+            }
+        }
+
+        // Corrigeer currentPage als die buiten bereik valt
+        let safePage = min(max(currentPage, 0), context.coordinator.controllers.count > 0 ? context.coordinator.controllers.count - 1 : 0)
+        if currentPage != safePage {
+            DispatchQueue.main.async {
+                self.currentPage = safePage
+            }
+        }
+
+        if context.coordinator.controllers.indices.contains(safePage) {
+            let controller = context.coordinator.controllers[safePage]
+            uiViewController.setViewControllers([controller], direction: .forward, animated: false)
+        }
     }
 
     class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {

@@ -5,7 +5,6 @@
 //  Created by Manfred on 23/11/2025.
 //
 
-
 import Foundation
 import UIKit
 
@@ -37,9 +36,13 @@ final class CalendarImageCache {
     // MARK: - Public Methods
 
     /// Fetch image for a specific date
-    func image(for date: Date) async -> UIImage? {
-        // Never allow future dates
-        guard date <= Date() else { return nil }
+    /// - Parameter date: The date of the cartoon
+    /// - Parameter allowFuture: If true, allows fetching images for future dates (for prefetching)
+    func image(for date: Date, allowFuture: Bool = false) async -> UIImage? {
+        // Only allow requested date if in the past/until today, unless allowFuture is true
+        if !allowFuture && date > Date() {
+            return nil
+        }
 
         let filename = filenameFor(date: date)
 
@@ -95,7 +98,9 @@ final class CalendarImageCache {
         }
 
         for date in datesToPrefetch {
-            _ = await image(for: date)
+            // Alleen bij prefetchen mag allowFuture true zijn
+            let isTomorrow = calendar.isDate(date, inSameDayAs: calendar.date(byAdding: .day, value: 1, to: today)!)
+            _ = await image(for: date, allowFuture: isTomorrow)
         }
 
         cleanupCache(today: today)
@@ -111,12 +116,17 @@ final class CalendarImageCache {
         return formatter.string(from: date) + ".png"
     }
 
-    /// Remove files outside the buffer
+    /// Remove files outside the buffer, but always keep yesterday, today, and tomorrow
     private func cleanupCache(today: Date) {
         let fm = FileManager.default
         let calendar = Calendar.current
 
         guard let minDate = calendar.date(byAdding: .day, value: -bufferPast, to: today) else { return }
+
+        // Bereken gisteren, vandaag, morgen
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: today)!
+        let keepDates: Set<Date> = [yesterday, today, tomorrow]
 
         do {
             let files = try fm.contentsOfDirectory(at: cacheFolder, includingPropertiesForKeys: nil)
@@ -127,7 +137,10 @@ final class CalendarImageCache {
                 formatter.locale = Locale(identifier: "nl_NL")
 
                 if let fileDate = formatter.date(from: name) {
-                    if fileDate < minDate || fileDate > today.addingTimeInterval(24*60*60) {
+                    // Vergelijk alleen op jaar, maand, dag (tijd negeren)
+                    let isKeepDate = keepDates.contains { calendar.isDate($0, inSameDayAs: fileDate) }
+
+                    if !isKeepDate && (fileDate < minDate || fileDate > today.addingTimeInterval(24*60*60)) {
                         try? fm.removeItem(at: file)
                         memoryCache.removeObject(forKey: file.lastPathComponent as NSString)
                     }
