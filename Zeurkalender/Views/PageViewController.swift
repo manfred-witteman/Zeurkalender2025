@@ -78,7 +78,7 @@ struct PageCurlView: UIViewControllerRepresentable {
             // --- PREFETCH LOGICA ---
             // Prefetch buffer-dagen terug en 1 dag vooruit, alleen als ze niet al gecached zijn
             let bufferPast = parent.viewModel.imageCache.bufferPast
-            let bufferFuture = 1 // bijvoorbeeld 1 dag vooruit
+            let bufferFuture = 7 // een week vooruit
 
             let prefetchOffsets = (-bufferPast...bufferFuture).filter { $0 != 0 } // Exclude huidige dag
             for offset in prefetchOffsets {

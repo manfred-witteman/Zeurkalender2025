@@ -20,6 +20,13 @@ final class AppViewModel: ObservableObject {
         baseURL: AppConfig.imagesBaseURL
     )
 
+    init() {
+        // Load settings immediately at startup so image URLs are known
+        Task { [weak self] in
+            await self?.loadSettings()
+        }
+    }
+
     /// Load settings and prefetch images
     func loadSettings() async {
         do {
@@ -38,5 +45,3 @@ final class AppViewModel: ObservableObject {
         return await imageCache.image(for: date)
     }
 }
-
-

@@ -1,10 +1,12 @@
 import SwiftUI
+import Combine
 
 struct ContentView: View {
     @EnvironmentObject var viewModel: AppViewModel
     @State private var currentPage = 0
     @State private var dates: [Date] = []
     @State private var isSharePresented = false
+    @State private var didLoadDays = false
 
     var body: some View {
         ZStack {
@@ -44,7 +46,7 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $isSharePresented) {
-            if !dates.isEmpty && currentPage < dates.count, 
+            if !dates.isEmpty && currentPage < dates.count,
                let img = viewModel.imageCache.cachedImage(for: dates[currentPage]) {
                 ShareSheet(items: [
                     img,
@@ -53,7 +55,12 @@ struct ContentView: View {
             }
         }
         .task {
+            guard !didLoadDays else { return }
+            didLoadDays = true
             await loadDays()
+        }
+        .onReceive(viewModel.$settings.map { $0 != nil }.removeDuplicates()) { _ in
+            Task { await loadDays() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             scrollToToday()
@@ -62,7 +69,7 @@ struct ContentView: View {
 
     // MARK: - Helper functions
     private func loadDays() async {
-        await viewModel.loadSettings()
+        // Settings worden nu automatisch in AppViewModel.init() geladen
         guard let settings = viewModel.settings else { return }
         let calendar = Calendar.current
         let today = calendar.startOfDay(for: Date())

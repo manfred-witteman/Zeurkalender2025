@@ -15,21 +15,16 @@ struct ZeurkalenderApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(viewModel)
-                .task {
-                    await viewModel.loadSettings()
-                }
         }
         // Hide default menu bar
-                .commands {
-                    // Remove all default commands
-                    CommandGroup(replacing: .newItem) {}
-                    CommandGroup(replacing: .pasteboard) {}
-                    CommandGroup(replacing: .appSettings) {}
-                    CommandGroup(replacing: .undoRedo) {}
-                    CommandGroup(replacing: .textEditing) {}
-                    CommandGroup(replacing: .toolbar) {}
-                }
+        .commands {
+            // Remove all default commands
+            CommandGroup(replacing: .newItem) {}
+            CommandGroup(replacing: .pasteboard) {}
+            CommandGroup(replacing: .appSettings) {}
+            CommandGroup(replacing: .undoRedo) {}
+            CommandGroup(replacing: .textEditing) {}
+            CommandGroup(replacing: .toolbar) {}
+        }
     }
-    
-    
 }
