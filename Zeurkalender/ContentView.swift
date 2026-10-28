@@ -59,8 +59,11 @@ struct ContentView: View {
             didLoadDays = true
             await loadDays()
         }
-        .onReceive(viewModel.$settings.map { $0 != nil }.removeDuplicates()) { _ in
-            Task { await loadDays() }
+        // Niet via onReceive: die publisher wordt bij elke render opnieuw opgebouwd,
+        // waarna @Published de huidige waarde meteen opnieuw levert en removeDuplicates
+        // geen geheugen heeft. Dat liet het archief honderden keren per seconde herbouwen.
+        .onChange(of: viewModel.settings != nil) { ready in
+            if ready { Task { await loadDays() } }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
             Task { await refreshIfDayChanged() }
