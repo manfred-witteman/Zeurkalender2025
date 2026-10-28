@@ -21,7 +21,7 @@ final class CalendarImageCache {
     private(set) var cachedDates: [Date] = []
     // Registry van lopende download-taken per bestandsnaam
     private var ongoingTasks: [String: Task<UIImage?, Never>] = [:]
-    private var didPrefetch = false
+    private var prefetchedDay: Date?
 
     // MARK: - Init
 
@@ -118,15 +118,17 @@ final class CalendarImageCache {
     /// Prefetch images around today (past buffer + tomorrow)
     func prefetchImages(today: Date) async {
         let calendar = Calendar.current
+        let todayStart = calendar.startOfDay(for: today)
 
-        if didPrefetch {
-            print("[Prefetch] Skipping; already prefetched this session")
+        // Het buffervenster schuift mee met de dag, dus na middernacht mag opnieuw
+        // worden gehaald.
+        if prefetchedDay == todayStart {
+            print("[Prefetch] Skipping; already prefetched for this day")
             return
         }
-        didPrefetch = true
+        prefetchedDay = todayStart
 
         // 1) Always fetch today's image first and await it
-        let todayStart = calendar.startOfDay(for: today)
         print("[Prefetch] Fetching today's image first")
         let todaysImage = await image(for: todayStart, allowFuture: false)
         if todaysImage != nil {

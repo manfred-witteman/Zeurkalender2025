@@ -63,7 +63,13 @@ struct ContentView: View {
             Task { await loadDays() }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
-            scrollToToday()
+            Task { await refreshIfDayChanged() }
+        }
+        // Vuurt om middernacht en bij tijdzone- of zomertijdwissels. Nodig naast de
+        // notificatie hierboven, omdat een app die in Split View zichtbaar blijft staan
+        // nooit opnieuw naar de voorgrond komt.
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            Task { await refreshIfDayChanged() }
         }
     }
 
@@ -86,12 +92,28 @@ struct ContentView: View {
         scrollToToday()
     }
 
+    /// Bouwt het archief opnieuw op zodra de dag is verschoven sinds de laatste keer.
+    ///
+    /// `dates` loopt tot en met de dag waarop de lijst is samengesteld. Blijft de app
+    /// dagenlang in het geheugen staan, dan ontbreekt vandaag in die lijst en heeft
+    /// scrollToToday() niets om naartoe te springen.
+    private func refreshIfDayChanged() async {
+        let today = Calendar.current.startOfDay(for: Date())
+        guard let last = dates.last, last < today else {
+            scrollToToday()
+            return
+        }
+        await loadDays()
+        await viewModel.prefetchAroundToday()
+    }
+
     private func scrollToToday() {
         guard !dates.isEmpty else { return }
         let calendar = Calendar.current
-        if let todayIndex = dates.firstIndex(where: { calendar.isDateInToday($0) }) {
-            self.currentPage = todayIndex
-        }
+        // Valt terug op de laatste pagina, zodat de app nooit stil op een oude dag
+        // blijft hangen als vandaag onverhoopt toch ontbreekt.
+        let todayIndex = dates.firstIndex(where: { calendar.isDateInToday($0) }) ?? dates.count - 1
+        self.currentPage = todayIndex
     }
 }
 

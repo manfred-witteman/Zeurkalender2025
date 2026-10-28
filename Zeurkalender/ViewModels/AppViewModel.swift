@@ -40,6 +40,11 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    /// Ververs de prefetch-buffer rond de huidige dag
+    func prefetchAroundToday() async {
+        await imageCache.prefetchImages(today: Date())
+    }
+
     /// Fetch image for a specific date
     func image(for date: Date) async -> UIImage? {
         return await imageCache.image(for: date)

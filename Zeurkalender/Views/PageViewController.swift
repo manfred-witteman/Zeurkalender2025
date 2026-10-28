@@ -28,14 +28,28 @@ struct PageCurlView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: UIPageViewController, context: Context) {
-        if let controller = context.coordinator.controller(for: currentPage) {
-            uiViewController.setViewControllers([controller], direction: .forward, animated: false)
-        }
+        // De coordinator bewaart een kopie van deze struct. Zonder deze regel blijft hij
+        // naar de `dates` van de allereerste render kijken en groeit het archief nooit mee.
+        context.coordinator.parent = self
+
+        // setViewControllers tijdens een lopende curl-animatie laat UIPageViewController
+        // een exception gooien over het aantal aangeboden controllers.
+        guard !context.coordinator.isTransitioning else { return }
+
+        let shownIndex = uiViewController.viewControllers?.first
+            .flatMap { context.coordinator.indexFor(viewController: $0) }
+        guard shownIndex != currentPage,
+              let controller = context.coordinator.controller(for: currentPage) else { return }
+
+        let direction: UIPageViewController.NavigationDirection =
+            (shownIndex ?? 0) <= currentPage ? .forward : .reverse
+        uiViewController.setViewControllers([controller], direction: direction, animated: false)
     }
 
     class Coordinator: NSObject, UIPageViewControllerDataSource, UIPageViewControllerDelegate {
         var parent: PageCurlView
         var controllers: [Int: UIViewController] = [:] // cache per index
+        private(set) var isTransitioning = false
 
         init(_ parent: PageCurlView) {
             self.parent = parent
@@ -67,9 +81,15 @@ struct PageCurlView: UIViewControllerRepresentable {
         }
 
         func pageViewController(_ pageViewController: UIPageViewController,
+                                willTransitionTo pendingViewControllers: [UIViewController]) {
+            isTransitioning = true
+        }
+
+        func pageViewController(_ pageViewController: UIPageViewController,
                                 didFinishAnimating finished: Bool,
                                 previousViewControllers: [UIViewController],
                                 transitionCompleted completed: Bool) {
+            isTransitioning = false
             guard completed,
                   let visibleVC = pageViewController.viewControllers?.first,
                   let index = indexFor(viewController: visibleVC) else { return }
